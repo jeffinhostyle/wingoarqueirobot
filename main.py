@@ -2,7 +2,7 @@ import os
 import telebot
 from flask import Flask, request
 
-API_TOKEN = os.getenv('API_TOKEN')
+API_TOKEN = os.getenv('API_TOKEN', '7920202192:AAEGpjy5k39moDng2DpWqw_LEgmmFU-QI1U')
 bot = telebot.TeleBot(API_TOKEN)
 
 app = Flask(__name__)
@@ -42,5 +42,6 @@ def home():
 
 if __name__ == '__main__':
     bot.remove_webhook()
-    bot.set_webhook(url=os.getenv('WEBHOOK_URL'))
+    webhook_url = f'https://web-production-d7eba.up.railway.app/{API_TOKEN}'
+    bot.set_webhook(url=webhook_url)
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
