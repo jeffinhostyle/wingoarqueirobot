@@ -114,7 +114,6 @@ def index():
     return "Bot rodando com webhook!"
 
 async def set_webhook():
-    # Use sua URL pública do Railway aqui (sem o token!)
     webhook_url = "https://web-production-d7eba.up.railway.app/webhook"
     await application.bot.delete_webhook()
     await application.bot.set_webhook(webhook_url)
