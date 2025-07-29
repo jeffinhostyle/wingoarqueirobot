@@ -2,8 +2,7 @@ import os
 import datetime
 import random
 import asyncio
-
-from telegram import Update, Bot
+from telegram import Update
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, ContextTypes,
     MessageHandler, filters
@@ -11,30 +10,30 @@ from telegram.ext import (
 from flask import Flask, request
 
 API_TOKEN = os.getenv('API_TOKEN')
-if not API_TOKEN:
-    raise RuntimeError("Variável de ambiente API_TOKEN não encontrada!")
 
-WEBHOOK_URL = os.getenv('WEBHOOK_URL')
-if not WEBHOOK_URL:
-    raise RuntimeError("Variável de ambiente WEBHOOK_URL não encontrada!")
+if not API_TOKEN:
+    raise ValueError("API_TOKEN não está configurado nas variáveis de ambiente")
 
 ADMIN_ID = 5052937721
 
-clients = {}         # {user_id: validade_datetime}
-activation_codes = {}  # {codigo: validade_datetime}
+clients = {}
+activation_codes = {}
 
 app = Flask(__name__)
-bot = Bot(token=API_TOKEN)
+
+application = ApplicationBuilder().token(API_TOKEN).build()
+
+def gerar_codigo_unico():
+    return ''.join(random.choices('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=10))
 
 async def gerarcodigo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
-        await update.message.reply_text("❌ Você não tem permissão para usar este comando.")
+        await update.message.reply_text("Você não tem permissão para usar este comando.")
         return
-    codigo = ''.join(random.choices('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=10))
-    validade = datetime.datetime.now() + datetime.timedelta(days=30)
-    activation_codes[codigo] = validade
-    await update.message.reply_text(f"✅ Código gerado: {codigo}\nValidade até {validade.strftime('%d/%m/%Y %H:%M')}")
+    codigo = gerar_codigo_unico()
+    activation_codes[codigo] = datetime.datetime.now() + datetime.timedelta(days=30)
+    await update.message.reply_text(f"Código gerado: {codigo}")
 
 async def ativar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -46,11 +45,11 @@ async def ativar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if validade and validade > datetime.datetime.now():
         clients[user_id] = validade
         del activation_codes[codigo]
-        await update.message.reply_text(f"✅ Ativação feita com sucesso! Validade até {validade.strftime('%d/%m/%Y %H:%M')}")
+        await update.message.reply_text(f"Código ativado com sucesso! Validade até {validade.strftime('%d/%m/%Y %H:%M')}")
     else:
-        await update.message.reply_text("❌ Código inválido ou expirado.")
+        await update.message.reply_text("Código inválido ou expirado.")
 
-def cliente_ativo(user_id: int) -> bool:
+def cliente_ativo(user_id):
     if user_id == ADMIN_ID:
         return True
     validade = clients.get(user_id)
@@ -61,7 +60,7 @@ async def analisar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = update.message.text.lower()
 
     if not cliente_ativo(user_id):
-        await update.message.reply_text("❌ Você não está ativado. Use /ativar <código> para ativar o acesso.")
+        await update.message.reply_text("Você não está ativado. Use /ativar <código> para ativar seu acesso.")
         return
 
     seq = ''.join(c for c in texto if c in ('g', 'p'))
@@ -70,7 +69,7 @@ async def analisar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if seq[-3:] in ('ggg', 'ppp'):
         await update.message.reply_text(
-            "⚠️ Padrão desfavorável detectado.\nPor segurança, aguarde 3 rodadas antes de apostar."
+            "⚠️ Padrão não favorável detectado.\nPor segurança, aguarde mais 3 rodadas antes de apostar."
         )
         return
 
@@ -83,45 +82,45 @@ async def analisar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sinal = 'G'
     else:
         await update.message.reply_text(
-            "⚠️ Padrão desfavorável detectado.\nPor segurança, aguarde 3 rodadas antes de apostar."
+            "⚠️ Padrão não favorável detectado.\nPor segurança, aguarde mais 3 rodadas antes de apostar."
         )
         return
 
     await update.message.reply_text(
-        f"🎯 Próxima aposta: {sinal}\nUse no máximo 3 gales.\nApós ganhar, aguarde 3 rodadas antes de apostar novamente."
+        f"🎯 Próxima aposta: {sinal}\nUse no máximo 3 gales para otimizar suas chances.\nApós ganhar, aguarde 3 rodadas antes de apostar novamente."
     )
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🤖 Bem-vindo ao Bot Wingo Arqueiro!\n\n"
-        "Admin: /gerarcodigo para gerar códigos.\n"
-        "Cliente: /ativar <código> para ativar seu acesso.\n"
-        "Envie uma sequência de 10 resultados (g/p) para receber seu sinal automático."
+        "Bem-vindo ao bot Wingo Arqueiro!\n"
+        "Admin: use /gerarcodigo para gerar códigos.\n"
+        "Clientes: use /ativar <código> para ativar.\n"
+        "Envie a sequência de 10 resultados (g/p) diretamente para receber seu sinal automaticamente."
     )
-
-application = ApplicationBuilder().token(API_TOKEN).build()
 
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("gerarcodigo", gerarcodigo))
 application.add_handler(CommandHandler("ativar", ativar))
 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), analisar_texto))
 
-@app.route(f'/{API_TOKEN}', methods=['POST'])
+@app.route("/webhook", methods=["POST"])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), bot)
+    update = Update.de_json(request.get_json(force=True), application.bot)
     asyncio.run(application.process_update(update))
     return "OK", 200
 
-@app.route('/')
+@app.route("/")
 def index():
-    return "Bot Wingo Arqueiro está ativo!", 200
+    return "Bot rodando com webhook!"
 
-async def setup_webhook():
-    webhook_url = f"{WEBHOOK_URL}/{API_TOKEN}"
-    await bot.delete_webhook()
-    await bot.set_webhook(webhook_url)
-    print(f"Webhook configurado para: {webhook_url}")
+async def set_webhook():
+    # Use sua URL pública do Railway aqui (sem o token!)
+    webhook_url = "https://web-production-d7eba.up.railway.app/webhook"
+    await application.bot.delete_webhook()
+    await application.bot.set_webhook(webhook_url)
 
-if __name__ == '__main__':
-    asyncio.run(setup_webhook())
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', '5000')))
+if __name__ == "__main__":
+    import threading
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(set_webhook())
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
