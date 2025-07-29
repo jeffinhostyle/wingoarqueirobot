@@ -1,12 +1,12 @@
 import os
 import datetime
 import random
+from flask import Flask, request, abort
 from telegram import Update, Bot
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, ContextTypes,
-    MessageHandler, filters, Dispatcher
+    Application, CommandHandler, ContextTypes,
+    MessageHandler, filters
 )
-from flask import Flask, request, abort
 
 API_TOKEN = os.getenv('API_TOKEN', '7920202192:AAEGpjy5k39moDng2DpWqw_LEgmmFU-QI1U')
 ADMIN_ID = 5052937721
@@ -16,7 +16,9 @@ activation_codes = {}  # codigo: validade datetime
 
 app = Flask(__name__)
 bot = Bot(token=API_TOKEN)
-dispatcher = Dispatcher(bot, None, workers=0, use_context=True)
+
+# Criar a aplicação do telegram sem rodar polling
+application = Application.builder().token(API_TOKEN).build()
 
 def gerar_codigo_unico():
     return ''.join(random.choices('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=10))
@@ -93,32 +95,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Envie a sequência de 10 resultados (g/p) diretamente para receber seu sinal automaticamente."
     )
 
-# Registrar handlers no dispatcher
-dispatcher.add_handler(CommandHandler("start", start))
-dispatcher.add_handler(CommandHandler("gerarcodigo", gerarcodigo))
-dispatcher.add_handler(CommandHandler("ativar", ativar))
-dispatcher.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), analisar_texto))
+# Registrar handlers
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("gerarcodigo", gerarcodigo))
+application.add_handler(CommandHandler("ativar", ativar))
+application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), analisar_texto))
 
-# Rota para o webhook do Telegram
+# Webhook endpoint Flask
 @app.route(f'/{API_TOKEN}', methods=['POST'])
 def webhook():
-    if request.method == "POST":
-        update = Update.de_json(request.get_json(force=True), bot)
-        dispatcher.process_update(update)
-        return "OK", 200
-    else:
-        abort(403)
+    update = Update.de_json(request.get_json(force=True), bot)
+    application.update_queue.put(update)
+    return 'OK', 200
 
-# Rota raiz só para teste simples
 @app.route('/')
 def home():
-    return "Bot está ativo!", 200
+    return 'Bot está ativo!', 200
 
 if __name__ == '__main__':
-    # Configurar webhook para seu domínio Railway (substitua abaixo pelo seu domínio)
     webhook_url = f'https://web-production-d7eba.up.railway.app/{API_TOKEN}'
     bot.delete_webhook()
     bot.set_webhook(url=webhook_url)
 
-    # Rodar app Flask (Gunicorn deve ser usado no Railway)
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
