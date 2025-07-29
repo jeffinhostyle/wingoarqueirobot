@@ -2,17 +2,14 @@ import os
 import datetime
 import random
 import asyncio
-from flask import Flask, request, abort
 from telegram import Update, Bot
 from telegram.ext import (
-    Application, CommandHandler, ContextTypes,
+    ApplicationBuilder, CommandHandler, ContextTypes,
     MessageHandler, filters
 )
+from flask import Flask, request, abort
 
-API_TOKEN = os.getenv('API_TOKEN', '').strip()
-if not API_TOKEN:
-    raise ValueError("API_TOKEN não configurado ou está vazio!")
-
+API_TOKEN = os.getenv('API_TOKEN', '').strip()  # TOKEN LIMPO SEM ESPAÇOS
 ADMIN_ID = 5052937721
 
 clients = {}  # user_id: validade datetime
@@ -20,8 +17,7 @@ activation_codes = {}  # codigo: validade datetime
 
 app = Flask(__name__)
 bot = Bot(token=API_TOKEN)
-
-application = Application.builder().token(API_TOKEN).build()
+application = ApplicationBuilder().token(API_TOKEN).build()
 
 def gerar_codigo_unico():
     return ''.join(random.choices('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=10))
@@ -98,6 +94,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Envie a sequência de 10 resultados (g/p) diretamente para receber seu sinal automaticamente."
     )
 
+# Registrar handlers na aplicação
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("gerarcodigo", gerarcodigo))
 application.add_handler(CommandHandler("ativar", ativar))
@@ -106,18 +103,18 @@ application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), analis
 @app.route(f'/{API_TOKEN}', methods=['POST'])
 def webhook():
     update = Update.de_json(request.get_json(force=True), bot)
-    application.update_queue.put(update)
+    asyncio.run(application.process_update(update))
     return 'OK', 200
 
 @app.route('/')
 def home():
-    return 'Bot está ativo!', 200
+    return "Bot está ativo!", 200
 
 async def setup_webhook():
-    webhook_url = f'https://web-production-d7eba.up.railway.app/{API_TOKEN}'
-    print(f"Webhook URL configurada para: {webhook_url}")
     await bot.delete_webhook()
-    await bot.set_webhook(url=webhook_url)
+    webhook_url = f'https://web-production-d7eba.up.railway.app/{API_TOKEN}'
+    await bot.set_webhook(webhook_url)
+    print(f"Webhook configurado: {webhook_url}")
 
 if __name__ == '__main__':
     asyncio.run(setup_webhook())
