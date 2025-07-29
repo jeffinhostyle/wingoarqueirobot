@@ -4,12 +4,15 @@ import random
 import asyncio
 from telegram import Update, Bot
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, ContextTypes,
+    Application, CommandHandler, ContextTypes,
     MessageHandler, filters
 )
 from flask import Flask, request, abort
 
-API_TOKEN = os.getenv('API_TOKEN', '').strip()  # TOKEN LIMPO SEM ESPAÇOS
+API_TOKEN = os.getenv("API_TOKEN")
+if not API_TOKEN:
+    raise ValueError("Variável de ambiente API_TOKEN não configurada!")
+
 ADMIN_ID = 5052937721
 
 clients = {}  # user_id: validade datetime
@@ -17,7 +20,9 @@ activation_codes = {}  # codigo: validade datetime
 
 app = Flask(__name__)
 bot = Bot(token=API_TOKEN)
-application = ApplicationBuilder().token(API_TOKEN).build()
+
+# Inicializa a aplicação do telegram (async)
+application = Application.builder().token(API_TOKEN).build()
 
 def gerar_codigo_unico():
     return ''.join(random.choices('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=10))
@@ -61,6 +66,7 @@ async def analisar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     seq = ''.join(c for c in texto if c in ('g', 'p'))
     if len(seq) != 10:
+        # Ignora sequências que não tenham 10 letras g/p
         return
 
     if seq[-3:] in ('ggg', 'ppp'):
@@ -94,28 +100,34 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Envie a sequência de 10 resultados (g/p) diretamente para receber seu sinal automaticamente."
     )
 
-# Registrar handlers na aplicação
+# Registrar handlers
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("gerarcodigo", gerarcodigo))
 application.add_handler(CommandHandler("ativar", ativar))
 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), analisar_texto))
 
-@app.route(f'/{API_TOKEN}', methods=['POST'])
+@app.route(f"/{API_TOKEN}", methods=["POST"])
 def webhook():
+    """Rota para receber updates do Telegram via webhook."""
     update = Update.de_json(request.get_json(force=True), bot)
     asyncio.run(application.process_update(update))
-    return 'OK', 200
+    return "OK", 200
 
-@app.route('/')
-def home():
-    return "Bot está ativo!", 200
+@app.route("/")
+def index():
+    return "Bot Wingo Arqueiro ativo!", 200
 
 async def setup_webhook():
+    """Configura o webhook no Telegram para receber updates."""
+    webhook_url = f"https://web-production-d7eba.up.railway.app/{API_TOKEN}"
+    # Remove webhook anterior
     await bot.delete_webhook()
-    webhook_url = f'https://web-production-d7eba.up.railway.app/{API_TOKEN}'
-    await bot.set_webhook(webhook_url)
-    print(f"Webhook configurado: {webhook_url}")
+    # Define o novo webhook
+    await bot.set_webhook(url=webhook_url)
+    print(f"Webhook configurado para {webhook_url}")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
+    # Configura webhook antes de rodar o Flask
     asyncio.run(setup_webhook())
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    # Roda o Flask app
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
