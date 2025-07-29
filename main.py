@@ -114,7 +114,9 @@ def index():
     return "Bot rodando com webhook!"
 
 async def set_webhook():
-    webhook_url = "https://web-production-d7eba.up.railway.app/webhook"
+    raw_url = "https://web-production-d7eba.up.railway.app/webhook"
+    webhook_url = raw_url.strip()
+    print(f"Setando webhook para: '{webhook_url}'")
     await application.bot.delete_webhook()
     await application.bot.set_webhook(webhook_url)
 
