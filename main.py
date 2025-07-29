@@ -9,7 +9,10 @@ from telegram.ext import (
     MessageHandler, filters
 )
 
-API_TOKEN = os.getenv('API_TOKEN', '7920202192:AAEGpjy5k39moDng2DpWqw_LEgmmFU-QI1U')
+API_TOKEN = os.getenv('API_TOKEN', '').strip()
+if not API_TOKEN:
+    raise ValueError("API_TOKEN não configurado ou está vazio!")
+
 ADMIN_ID = 5052937721
 
 clients = {}  # user_id: validade datetime
@@ -18,7 +21,6 @@ activation_codes = {}  # codigo: validade datetime
 app = Flask(__name__)
 bot = Bot(token=API_TOKEN)
 
-# Criar a aplicação do telegram sem rodar polling
 application = Application.builder().token(API_TOKEN).build()
 
 def gerar_codigo_unico():
@@ -96,13 +98,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Envie a sequência de 10 resultados (g/p) diretamente para receber seu sinal automaticamente."
     )
 
-# Registrar handlers
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("gerarcodigo", gerarcodigo))
 application.add_handler(CommandHandler("ativar", ativar))
 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), analisar_texto))
 
-# Webhook endpoint Flask
 @app.route(f'/{API_TOKEN}', methods=['POST'])
 def webhook():
     update = Update.de_json(request.get_json(force=True), bot)
@@ -115,6 +115,7 @@ def home():
 
 async def setup_webhook():
     webhook_url = f'https://web-production-d7eba.up.railway.app/{API_TOKEN}'
+    print(f"Webhook URL configurada para: {webhook_url}")
     await bot.delete_webhook()
     await bot.set_webhook(url=webhook_url)
 
