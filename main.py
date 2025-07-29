@@ -13,43 +13,43 @@ API_TOKEN = os.getenv('API_TOKEN')
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 
 if not API_TOKEN:
-    raise ValueError("API_TOKEN não está configurado nas variáveis de ambiente")
+    raise ValueError("API_TOKEN não configurado!")
 
 if not WEBHOOK_URL:
-    raise ValueError("WEBHOOK_URL não está configurado nas variáveis de ambiente")
+    raise ValueError("WEBHOOK_URL não configurado!")
+
+WEBHOOK_URL = WEBHOOK_URL.strip()
+
+print(f"[LOG] WEBHOOK_URL usado: '{WEBHOOK_URL}'")
 
 ADMIN_ID = 5052937721
-
 clients = {}
 activation_codes = {}
 
 app = Flask(__name__)
-
 application = ApplicationBuilder().token(API_TOKEN).build()
 
 def gerar_codigo_unico():
     return ''.join(random.choices('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=10))
 
 async def gerarcodigo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != ADMIN_ID:
-        await update.message.reply_text("Você não tem permissão para usar este comando.")
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("Sem permissão para esse comando.")
         return
     codigo = gerar_codigo_unico()
     activation_codes[codigo] = datetime.datetime.now() + datetime.timedelta(days=30)
     await update.message.reply_text(f"Código gerado: {codigo}")
 
 async def ativar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
     if len(context.args) != 1:
         await update.message.reply_text("Uso correto: /ativar <código>")
         return
     codigo = context.args[0].upper()
     validade = activation_codes.get(codigo)
     if validade and validade > datetime.datetime.now():
-        clients[user_id] = validade
+        clients[update.effective_user.id] = validade
         del activation_codes[codigo]
-        await update.message.reply_text(f"Código ativado com sucesso! Validade até {validade.strftime('%d/%m/%Y %H:%M')}")
+        await update.message.reply_text(f"Ativado até {validade.strftime('%d/%m/%Y %H:%M')}")
     else:
         await update.message.reply_text("Código inválido ou expirado.")
 
@@ -57,49 +57,44 @@ def cliente_ativo(user_id):
     if user_id == ADMIN_ID:
         return True
     validade = clients.get(user_id)
-    return validade is not None and validade > datetime.datetime.now()
+    return validade and validade > datetime.datetime.now()
 
 async def analisar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    texto = update.message.text.lower()
-
-    if not cliente_ativo(user_id):
-        await update.message.reply_text("Você não está ativado. Use /ativar <código> para ativar seu acesso.")
+    if not cliente_ativo(update.effective_user.id):
+        await update.message.reply_text("Use /ativar <código> para ativar seu acesso.")
         return
 
+    texto = update.message.text.lower()
     seq = ''.join(c for c in texto if c in ('g', 'p'))
     if len(seq) != 10:
         return
 
     if seq[-3:] in ('ggg', 'ppp'):
         await update.message.reply_text(
-            "⚠️ Padrão não favorável detectado.\nPor segurança, aguarde mais 3 rodadas antes de apostar."
+            "⚠️ Padrão desfavorável. Aguarde 3 rodadas antes de apostar."
         )
         return
 
     g_count = seq.count('g')
     p_count = seq.count('p')
+    sinal = 'P' if g_count > p_count else 'G' if p_count > g_count else None
 
-    if g_count > p_count:
-        sinal = 'P'
-    elif p_count > g_count:
-        sinal = 'G'
-    else:
+    if not sinal:
         await update.message.reply_text(
-            "⚠️ Padrão não favorável detectado.\nPor segurança, aguarde mais 3 rodadas antes de apostar."
+            "⚠️ Padrão desfavorável. Aguarde 3 rodadas antes de apostar."
         )
         return
 
     await update.message.reply_text(
-        f"🎯 Próxima aposta: {sinal}\nUse no máximo 3 gales para otimizar suas chances.\nApós ganhar, aguarde 3 rodadas antes de apostar novamente."
+        f"🎯 Próxima aposta: {sinal}\nUse até 3 gales.\nApós ganhar, aguarde 3 rodadas."
     )
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Bem-vindo ao bot Wingo Arqueiro!\n"
-        "Admin: use /gerarcodigo para gerar códigos.\n"
-        "Clientes: use /ativar <código> para ativar.\n"
-        "Envie a sequência de 10 resultados (g/p) diretamente para receber seu sinal automaticamente."
+        "Bot Wingo Arqueiro\n"
+        "Admin: /gerarcodigo\n"
+        "Cliente: /ativar <código>\n"
+        "Envie sequência de 10 resultados (g/p) para receber sinal."
     )
 
 application.add_handler(CommandHandler("start", start))
@@ -115,13 +110,13 @@ def webhook():
 
 @app.route("/")
 def index():
-    return "Bot rodando com webhook!"
+    return "Bot rodando."
 
 async def set_webhook():
-    webhook_url = WEBHOOK_URL.strip()
-    print(f"Setando webhook para: '{webhook_url}'")
+    print("[LOG] Configurando webhook...")
     await application.bot.delete_webhook()
-    await application.bot.set_webhook(webhook_url)
+    await application.bot.set_webhook(WEBHOOK_URL)
+    print("[LOG] Webhook configurado.")
 
 if __name__ == "__main__":
     import threading
