@@ -113,10 +113,11 @@ def index():
     return "Bot rodando."
 
 async def set_webhook():
-    print("[LOG] Configurando webhook...")
+    print(f"[LOG] Tentando deletar webhook...")
     await application.bot.delete_webhook()
+    print(f"[LOG] Tentando setar webhook para: '{WEBHOOK_URL}'")
     await application.bot.set_webhook(WEBHOOK_URL)
-    print("[LOG] Webhook configurado.")
+    print("[LOG] Webhook configurado com sucesso.")
 
 if __name__ == "__main__":
     import threading
