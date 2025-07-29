@@ -1,6 +1,7 @@
 import os
 import datetime
 import random
+import asyncio
 from flask import Flask, request, abort
 from telegram import Update, Bot
 from telegram.ext import (
@@ -112,9 +113,11 @@ def webhook():
 def home():
     return 'Bot está ativo!', 200
 
-if __name__ == '__main__':
+async def setup_webhook():
     webhook_url = f'https://web-production-d7eba.up.railway.app/{API_TOKEN}'
-    bot.delete_webhook()
-    bot.set_webhook(url=webhook_url)
+    await bot.delete_webhook()
+    await bot.set_webhook(url=webhook_url)
 
+if __name__ == '__main__':
+    asyncio.run(setup_webhook())
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
