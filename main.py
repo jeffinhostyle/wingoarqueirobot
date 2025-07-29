@@ -10,9 +10,13 @@ from telegram.ext import (
 from flask import Flask, request
 
 API_TOKEN = os.getenv('API_TOKEN')
+WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 
 if not API_TOKEN:
     raise ValueError("API_TOKEN não está configurado nas variáveis de ambiente")
+
+if not WEBHOOK_URL:
+    raise ValueError("WEBHOOK_URL não está configurado nas variáveis de ambiente")
 
 ADMIN_ID = 5052937721
 
@@ -114,8 +118,7 @@ def index():
     return "Bot rodando com webhook!"
 
 async def set_webhook():
-    raw_url = "https://web-production-d7eba.up.railway.app/webhook"
-    webhook_url = raw_url.strip()
+    webhook_url = WEBHOOK_URL.strip()
     print(f"Setando webhook para: '{webhook_url}'")
     await application.bot.delete_webhook()
     await application.bot.set_webhook(webhook_url)
